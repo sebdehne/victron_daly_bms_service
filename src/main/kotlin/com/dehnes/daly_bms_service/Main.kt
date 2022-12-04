@@ -13,14 +13,18 @@ fun objectMapper() = jacksonObjectMapper()
     .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
     .setSerializationInclusion(JsonInclude.Include.NON_NULL)
 
+fun main(vararg args: String) {
 
-fun main() {
+    check(args.isNotEmpty()) { "Invalid argument. Usage: <properties.json>" }
 
     val executorService = Executors.newCachedThreadPool()
     val objectMapper = objectMapper()
-    val persistenceService = PersistenceService(objectMapper)
+    val persistenceService = PersistenceService(objectMapper, args[0])
 
-    BmsService(executorService, persistenceService).start()
+    BmsService(
+        executorService,
+        persistenceService,
+    ).start()
 
     while (true) {
         Thread.sleep(10000)

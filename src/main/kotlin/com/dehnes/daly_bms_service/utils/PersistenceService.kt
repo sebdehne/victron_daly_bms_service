@@ -7,9 +7,10 @@ import java.nio.charset.Charset
 import java.util.*
 
 class PersistenceService(
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    configFile: String,
 ) {
-    private val filenameJson = System.getProperty("STORAGE_FILE_NAME", "properties.json")
+    private val filenameJson = System.getProperty("STORAGE_FILE_NAME", configFile)
 
     fun inDevMode() = this["devMode", "false"].toBoolean()
 
