@@ -23,7 +23,11 @@ object SerialPortFinder {
         }.firstOrNull { it.second.contains(usbDeviceId) }
             ?.first
 
-        return device?.let { "/dev/$it" }
+        return device?.let {
+            val devFile = "/dev/$it"
+            check("stty -F $devFile 9600 raw".runCommand() != null)
+            devFile
+        }
     }
 
     private fun String.runCommand(workingDir: String = ".") = try {

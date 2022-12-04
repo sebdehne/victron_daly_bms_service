@@ -4,19 +4,24 @@ import com.dehnes.daly_bms_service.utils.AbstractProcess
 import com.dehnes.daly_bms_service.utils.PersistenceService
 import com.dehnes.daly_bms_service.utils.SerialPortFinder
 import mu.KotlinLogging
+import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 
 class BmsService(
-    executorService: ExecutorService,
+    private val executorService: ExecutorService,
     private val persistenceService: PersistenceService,
 ) : AbstractProcess(
     executorService,
     persistenceService["interval_in_seconds", "10"]!!.toLong(),
 ) {
     private val logger = KotlinLogging.logger { }
+    private val numberOfCells = persistenceService["daly_bms.numberOfCells", "16"]!!.toInt()
     override fun logger() = logger
 
     private val connected = mutableMapOf<BmsId, BmsConnection>()
+
+    val listeners = ConcurrentHashMap<String, (data: List<BmsData>) -> Unit>()
 
     override fun tickLocked(): Boolean {
         logger.info { "Running" }
@@ -52,7 +57,7 @@ class BmsService(
             try {
                 val serialFile =
                     SerialPortFinder.findSerialPortFor(d.usbId) ?: error("Could not lookup serial file for $d")
-                connected[d] = BmsConnection(serialFile, d)
+                connected[d] = BmsConnection(serialFile, d, numberOfCells)
             } catch (e: Exception) {
                 logger.error(e) { "Could not connect to $d" }
             }
@@ -60,12 +65,10 @@ class BmsService(
 
         // 3 - query all data
         val collectedData = connected.mapNotNull { (device, connection) ->
-            val data = connection.readData() ?: run {
+            connection.readData() ?: run {
                 toBeDisconnected.add(device)
                 return@mapNotNull null
             }
-
-            device to data
         }
 
         // 4 - close failed connections
@@ -73,6 +76,15 @@ class BmsService(
 
         // 4 - publish data
         logger.info { "collectedData=$collectedData" }
+        listeners.forEach {
+            executorService.submit {
+                try {
+                    it.value(collectedData)
+                } catch (e: Exception) {
+                    logger.error(e) { "Listener failed to prosess data" }
+                }
+            }
+        }
 
         return true
     }
@@ -83,4 +95,30 @@ data class BmsId(
     val usbId: String,
     val bmsId: String,
     val displayName: String,
+)
+
+data class BmsData(
+    val bmsId: BmsId,
+    val timestamp: Instant,
+    val voltage: Double,
+    val current: Double,
+    val soc: Double,
+    val maxCellVoltage: Double,
+    val maxCellNumber: Int,
+    val minCellVoltage: Double,
+    val minCellNumber: Int,
+    val maxTemp: Int,
+    val maxTempCellNumber: Int,
+    val minTemp: Int,
+    val minTempCellNumber: Int,
+    val status: BmStatus,
+    val mosfetCharging: Boolean,
+    val mosfetDischarging: Boolean,
+    val lifeCycles: Int,
+    val remainingCapacity: Double, // in Ah
+    val chargerStatus: Boolean,
+    val loadStatus: Boolean,
+    val cycles: Int,
+    val cellVoltages: List<Double>,
+    val errors: List<String>,
 )

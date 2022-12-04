@@ -23,7 +23,7 @@ abstract class AbstractProcess(
                     logger().error("", e)
                 }
             }
-        }, intervalInSeconds, intervalInSeconds, TimeUnit.SECONDS)
+        }, 0, intervalInSeconds, TimeUnit.SECONDS)
     }
 
     fun tick(): Boolean = if (runLock.tryLock()) {
