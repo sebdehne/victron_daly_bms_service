@@ -28,4 +28,4 @@ fun Byte.toUnsignedInt(): Int = this.toInt().let {
 
 fun ByteArray.toHex(): String = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
 
-fun Double.round2d() = (this * 100).roundToLong().toDouble() * 100
+fun Double.round2d() = (this * 100).roundToLong().toDouble() / 100
