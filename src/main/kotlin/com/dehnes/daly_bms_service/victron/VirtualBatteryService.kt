@@ -62,7 +62,7 @@ class VirtualBatteryService(
         val soc = knownBmsData.map { it.value.soc }.average().round2d()
         val voltage = knownBmsData.map { it.value.voltage }.average().round2d()
         val current = knownBmsData.map { it.value.current }.sum()
-        val power = voltage * current
+        val power = (voltage * current).round2d()
         val maxTemperature = knownBmsData.map { it.value.maxTemp }.max()
         val minTemperature = knownBmsData.map { it.value.minTemp }.min()
         val maxCellVoltage = knownBmsData.maxBy { it.value.maxCellVoltage }.value
