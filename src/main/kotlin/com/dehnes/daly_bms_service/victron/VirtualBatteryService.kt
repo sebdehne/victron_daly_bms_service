@@ -180,7 +180,6 @@ class VirtualBatteryService(
                 DbusData("/Alarms/HighChargeCurrent", "", none),
                 DbusData("/Alarms/HighDischargeCurrent", "", none),
                 DbusData("/Alarms/CellImbalance", (if (cellDelta > 0.1) 2 else 0).toString(), integer),
-                DbusData("/Alarms/InternalFailure", "", none),
                 DbusData("/Alarms/HighChargeTemperature", (if (maxTemperature > 40) 2 else 0).toString(), integer),
                 DbusData("/Alarms/LowChargeTemperature", (if (minTemperature < 10) 2 else 0).toString(), integer),
                 DbusData("/Alarms/HighTemperature", (if (maxTemperature > 40) 2 else 0).toString(), integer),
