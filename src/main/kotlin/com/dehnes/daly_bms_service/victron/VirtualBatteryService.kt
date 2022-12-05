@@ -1,9 +1,6 @@
 package com.dehnes.daly_bms_service.victron
 
-import com.dehnes.daly_bms_service.bms.BmsData
-import com.dehnes.daly_bms_service.bms.BmsId
-import com.dehnes.daly_bms_service.bms.BmsService
-import com.dehnes.daly_bms_service.bms.numberOfCells
+import com.dehnes.daly_bms_service.bms.*
 import com.dehnes.daly_bms_service.utils.PersistenceService
 import com.dehnes.daly_bms_service.utils.round2d
 import com.dehnes.daly_bms_service.victron.ValueTypes.*
@@ -53,6 +50,15 @@ class VirtualBatteryService(
     }
 
     private fun republishTotal() {
+        val numberOfCells = persistenceService.numberOfCells()
+        val numberOfPacks = persistenceService.numberOfPacks()
+
+
+
+        if (knownBmsData.size < numberOfPacks) {
+            logger.info { "Not sending data to Victron - have only knownBmsData.size=${knownBmsData.size}" }
+            return
+        }
 
         val minBatteryVoltage = knownBmsData.minOf { it.value.minCellVoltage } * persistenceService.numberOfCells()
         val maxBatteryVoltage = knownBmsData.minOf { it.value.maxCellVoltage } * persistenceService.numberOfCells()
@@ -71,7 +77,6 @@ class VirtualBatteryService(
 
         val cellDelta = maxCellVoltage.maxCellVoltage - minCellVoltage.minCellVoltage
 
-        val numberOfCells = persistenceService.numberOfCells()
         val toBeSendt = DbusService(
             "daly_bms_battery_1",
             "battery",
@@ -94,10 +99,10 @@ class VirtualBatteryService(
                 DbusData("/Info/MaxChargeCurrent", 210.0.toString(), float),
                 DbusData("/Info/MaxDischargeCurrent", 350.0.toString(), float),
                 DbusData("/System/NrOfCellsPerBattery", numberOfCells.toString(), integer),
-                DbusData("/System/NrOfModulesOnline", "1", integer),
-                DbusData("/System/NrOfModulesOffline", "1", integer),
-                DbusData("/System/NrOfModulesBlockingCharge", "", none),
-                DbusData("/System/NrOfModulesBlockingDischarge", "", none),
+                DbusData("/System/NrOfModulesOnline", "1", integer), // TODO
+                DbusData("/System/NrOfModulesOffline", "0", integer), // TODO
+                DbusData("/System/NrOfModulesBlockingCharge", "", none), // TODO
+                DbusData("/System/NrOfModulesBlockingDischarge", "", none), // TODO
 
                 DbusData("/Capacity", capacityRemainig.toString(), float),
                 DbusData("/InstalledCapacity", installedCapacity.toString(), integer),

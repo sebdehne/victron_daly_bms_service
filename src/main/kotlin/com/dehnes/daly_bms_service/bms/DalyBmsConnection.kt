@@ -21,16 +21,17 @@ class BmsConnection(
     val outputStream = file.outputStream()
     val inputStream = file.inputStream()
     val rxBuf = ByteArray(1024) { 0 }
+    val batterId = bmsId.bmsId
 
     init {
-        read(rxBuf.size, Duration.ofSeconds(1))
-        logger.info { "Connected to $serialPortFile" }
+        read(rxBuf.size, Duration.ofSeconds(2))
+        logger.info { "$batterId - Connected to $serialPortFile" }
     }
 
     fun readData() = try {
         readDataInternal()
     } catch (e: Exception) {
-        logger.error(e) { "Could not read from $bmsId" }
+        logger.error(e) { "$batterId - Could not read from $bmsId" }
         null
     }
 
@@ -65,15 +66,20 @@ class BmsConnection(
     }
 
     private fun exec(cmd: DalyBmsCommand, responseFrames: Int = 1): List<ResponseFrame> {
-        val toSerialBytes = cmd.toSerialBytes()
-        outputStream.write(toSerialBytes)
-        outputStream.flush()
-        logger.debug { "Sent cmd=$cmd toSerialBytes=${toSerialBytes.toList()}" }
-        return readFrames(responseFrames) ?: error("Could not read response(s) for cmd=$cmd")
+        repeat(3) { retry ->
+            val toSerialBytes = cmd.toSerialBytes()
+            outputStream.write(toSerialBytes)
+            outputStream.flush()
+            logger.debug { "$batterId - Sent retry=$retry cmd=$cmd toSerialBytes=${toSerialBytes.toList()}" }
+            val result = readFrames(responseFrames)
+            if (result != null) return result
+        }
+
+        error("Could not read response(s) for cmd=$cmd")
     }
 
     private fun read(readBytes: Int, timeout: Duration): ByteArray {
-        logger.debug { "Trying to readBytes=$readBytes during timeout=${timeout.toSeconds()} seconds" }
+        logger.debug { "$batterId - Trying to readBytes=$readBytes during timeout=${timeout.toSeconds()} seconds" }
         val deadline = System.currentTimeMillis() + timeout.toMillis()
         var read = 0
         while (true) {
@@ -96,14 +102,17 @@ class BmsConnection(
 
         val array = ByteArray(read) { 0 }
         System.arraycopy(rxBuf, 0, array, 0, read)
-        logger.debug { "Read array=${array.toList()}" }
+        logger.debug { "$batterId - Read array=${array.toList()}" }
         return array
     }
 
     private fun readFrame(): ResponseFrame? {
         val rawData = read(13, Duration.ofSeconds(1))
         if (rawData.isEmpty()) return null // timeout
-        check(rawData.size == 13) { "Did not read 13 bytes" }
+        if (rawData.size != 13) {
+            logger.error { "$batterId - Did not read 13 bytes rawData=${rawData.toList()}" }
+            return null
+        }
 
         var checksum: Byte = 0
         (0..11).forEach {
@@ -120,7 +129,7 @@ class BmsConnection(
             },
             (checksum == rawData[12]).apply {
                 if (!this) {
-                    logger.error { "Checksum failure. checksum=$checksum rawData=$rawData" }
+                    logger.error { "$batterId - Checksum failure. checksum=$checksum rawData=${rawData.toList()}" }
                 }
             },
             rawData
@@ -144,7 +153,7 @@ class BmsConnection(
             outputStream.close()
             inputStream.close()
         } catch (e: Exception) {
-            logger.error(e) { "Could not close $serialPortFile" }
+            logger.error(e) { "$batterId - Could not close $serialPortFile" }
         }
     }
 
@@ -226,7 +235,7 @@ fun parseData(
 
         status = chargeDischargeStatus.data[0].toInt().let { statusInt ->
             BmStatus.values().firstOrNull { it.value == statusInt } ?: run {
-                logger.error { "No BmStatus for statusInt=$statusInt" }
+                logger.error { "${usbId.bmsId} - No BmStatus for statusInt=$statusInt" }
                 BmStatus.stationary
             }
         },

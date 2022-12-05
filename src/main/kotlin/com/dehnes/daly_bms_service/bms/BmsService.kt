@@ -3,6 +3,7 @@ package com.dehnes.daly_bms_service.bms
 import com.dehnes.daly_bms_service.utils.AbstractProcess
 import com.dehnes.daly_bms_service.utils.PersistenceService
 import com.dehnes.daly_bms_service.utils.SerialPortFinder
+import com.dehnes.daly_bms_service.utils.runInParallel
 import mu.KotlinLogging
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -10,7 +11,8 @@ import java.util.concurrent.ExecutorService
 
 
 fun PersistenceService.numberOfCells() = this["daly_bms.numberOfCells", "16"]!!.toInt()
-fun PersistenceService.numberOfPacks() = this.getAllFor("daly_bms.deviceSettings").filter { it.first.contains("displayName") }.count()
+fun PersistenceService.numberOfPacks() =
+    this.getAllFor("daly_bms.deviceSettings").filter { it.first.contains("displayName") }.count()
 
 class BmsService(
     private val executorService: ExecutorService,
@@ -68,10 +70,15 @@ class BmsService(
         }
 
         // 3 - query all data
-        val collectedData = connected.mapNotNull { (device, connection) ->
+        val collectedData = runInParallel(
+            executorService,
+            connected.toList(),
+        ) { (device, connection) ->
             connection.readData() ?: run {
-                toBeDisconnected.add(device)
-                return@mapNotNull null
+                synchronized(toBeDisconnected) {
+                    toBeDisconnected.add(device)
+                }
+                null
             }
         }
 
