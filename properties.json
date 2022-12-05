@@ -1,0 +1,39 @@
+{
+  "interval_in_seconds": "10",
+  "victron": {
+    "mqtt_host": "mqtt-broker.example.com",
+    "portalId": "48e7da87e605"
+  },
+  "daly_bms": {
+    "maxCellVoltage": "3.45",
+    "minCellVoltage": "3.0",
+    "minDischargeSoC": "10",
+    "maxChargeCurrent": "210",
+    "maxDischargeCurrent": "380",
+    "maxChargeTemp": "45",
+    "minChargeTemp": "5",
+    "maxDischargeTemp": "45",
+    "minDischargeTemp": "-10",
+    "bmsOfflineAfterSeconds": "60",
+    "numberOfCells": "16",
+    "devices": {
+      "usb-0:1.2:1.0": "battery_1",
+      "usb-0:1.1:1.0": "battery_2",
+      "usb-0:1.4:1.0": "battery_3"
+    },
+    "deviceSettings": {
+      "battery_1": {
+        "displayName": "Battery 1",
+        "capacity": "280"
+      },
+      "battery_2": {
+        "displayName": "Battery 2",
+        "capacity": "280"
+      },
+      "battery_3": {
+        "displayName": "Battery 3",
+        "capacity": "280"
+      }
+    }
+  }
+}
