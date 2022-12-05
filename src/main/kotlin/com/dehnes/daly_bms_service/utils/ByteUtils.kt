@@ -1,6 +1,7 @@
 package com.dehnes.daly_bms_service.utils
 
 import java.nio.ByteBuffer
+import kotlin.math.roundToLong
 
 fun readInt16Bits(buf: ByteArray, offset: Int): Int {
     val byteBuffer = ByteBuffer.allocate(4)
@@ -27,3 +28,4 @@ fun Byte.toUnsignedInt(): Int = this.toInt().let {
 
 fun ByteArray.toHex(): String = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
 
+fun Double.round2d() = (this * 100).roundToLong().toDouble() * 100

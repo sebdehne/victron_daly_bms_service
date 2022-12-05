@@ -17,13 +17,13 @@ class BmsConnection(
 
     private val logger = KotlinLogging.logger { }
 
-    val file = File("/dev/ttyUSB0")
+    val file = File(serialPortFile)
     val outputStream = file.outputStream()
     val inputStream = file.inputStream()
     val rxBuf = ByteArray(1024) { 0 }
 
     init {
-        read(rxBuf.size, Duration.ofSeconds(2))
+        read(rxBuf.size, Duration.ofSeconds(1))
         logger.info { "Connected to $serialPortFile" }
     }
 

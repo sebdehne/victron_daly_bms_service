@@ -8,6 +8,10 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 
+
+fun PersistenceService.numberOfCells() = this["daly_bms.numberOfCells", "16"]!!.toInt()
+fun PersistenceService.numberOfPacks() = this.getAllFor("daly_bms.deviceSettings").filter { it.first.contains("displayName") }.count()
+
 class BmsService(
     private val executorService: ExecutorService,
     private val persistenceService: PersistenceService,
@@ -16,7 +20,6 @@ class BmsService(
     persistenceService["interval_in_seconds", "10"]!!.toLong(),
 ) {
     private val logger = KotlinLogging.logger { }
-    private val numberOfCells = persistenceService["daly_bms.numberOfCells", "16"]!!.toInt()
     override fun logger() = logger
 
     private val connected = mutableMapOf<BmsId, BmsConnection>()
@@ -42,7 +45,8 @@ class BmsService(
             BmsId(
                 usbId = it.key,
                 bmsId = it.value,
-                displayName = persistenceService["daly_bms.deviceSettings.${it.value}.displayName", ""]!!
+                displayName = persistenceService["daly_bms.deviceSettings.${it.value}.displayName", ""]!!,
+                capacity = persistenceService["daly_bms.deviceSettings.${it.value}.capacity", "280"]!!.toInt(),
             )
         }
 
@@ -57,7 +61,7 @@ class BmsService(
             try {
                 val serialFile =
                     SerialPortFinder.findSerialPortFor(d.usbId) ?: error("Could not lookup serial file for $d")
-                connected[d] = BmsConnection(serialFile, d, numberOfCells)
+                connected[d] = BmsConnection(serialFile, d, persistenceService.numberOfCells())
             } catch (e: Exception) {
                 logger.error(e) { "Could not connect to $d" }
             }
@@ -75,7 +79,7 @@ class BmsService(
         closeToBeDisconnected()
 
         // 4 - publish data
-        logger.info { "collectedData=$collectedData" }
+        collectedData.forEach { logger.info { "$it" } }
         listeners.forEach {
             executorService.submit {
                 try {
@@ -95,6 +99,7 @@ data class BmsId(
     val usbId: String,
     val bmsId: String,
     val displayName: String,
+    val capacity: Int,
 )
 
 data class BmsData(
@@ -103,22 +108,29 @@ data class BmsData(
     val voltage: Double,
     val current: Double,
     val soc: Double,
+
     val maxCellVoltage: Double,
     val maxCellNumber: Int,
     val minCellVoltage: Double,
     val minCellNumber: Int,
+
     val maxTemp: Int,
     val maxTempCellNumber: Int,
     val minTemp: Int,
     val minTempCellNumber: Int,
+
     val status: BmStatus,
     val mosfetCharging: Boolean,
     val mosfetDischarging: Boolean,
+
     val lifeCycles: Int,
     val remainingCapacity: Double, // in Ah
+
     val chargerStatus: Boolean,
     val loadStatus: Boolean,
+
     val cycles: Int,
+
     val cellVoltages: List<Double>,
     val errors: List<String>,
 )

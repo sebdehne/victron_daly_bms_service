@@ -13,15 +13,18 @@ object SerialPortFinder {
      * Output: path to seral port device, if found
      */
     fun findSerialPortFor(usbDeviceId: String): String? {
+
+        // see
+        // $ udevadm info /dev/ttyUSB0
+        //
+        // and
+        // ID_PATH=platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1:1.0
+
         val connectedSerialPorts = "ls -1 /sys/bus/usb-serial/devices".runCommand() ?: return null
-        val device = connectedSerialPorts.mapNotNull { device ->
-            val lines = "cat /sys/bus/usb-serial/devices/$device/../../uevent".runCommand() ?: return@mapNotNull null
-            val productLine = lines.firstOrNull { it.startsWith("PRODUCT=") } ?: return@mapNotNull null
-            val productCodeRaw = productLine.split("=").last()
-            val productCode = productCodeRaw.replace("/", ":")
-            device to productCode
-        }.firstOrNull { it.second.contains(usbDeviceId) }
-            ?.first
+        val device = connectedSerialPorts.firstOrNull { device ->
+            val deviceData = "udevadm info /dev/$device".runCommand() ?: return@firstOrNull false
+            deviceData.any { it.contains(usbDeviceId) }
+        }
 
         return device?.let {
             val devFile = "/dev/$it"

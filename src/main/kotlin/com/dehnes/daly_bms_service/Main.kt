@@ -2,6 +2,8 @@ package com.dehnes.daly_bms_service
 
 import com.dehnes.daly_bms_service.bms.BmsService
 import com.dehnes.daly_bms_service.utils.PersistenceService
+import com.dehnes.daly_bms_service.victron.VictronMqttClient
+import com.dehnes.daly_bms_service.victron.VirtualBatteryService
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
@@ -21,10 +23,14 @@ fun main(vararg args: String) {
     val objectMapper = objectMapper()
     val persistenceService = PersistenceService(objectMapper, args[0])
 
-    BmsService(
+    val bmsService = BmsService(
         executorService,
         persistenceService,
-    ).start()
+    ).apply { this.start() }
+
+    val victronMqttClient = VictronMqttClient(persistenceService, objectMapper)
+    victronMqttClient.reconnect()
+    val virtualBatteryService = VirtualBatteryService(victronMqttClient, persistenceService, bmsService)
 
     while (true) {
         Thread.sleep(10000)
