@@ -230,6 +230,7 @@ class VirtualBatteryService(
         } else {
             val soc = onlineBmses.map { it.soc }.average()
 
+            // SoC above 90%: decrease the current linear down to 30% of maxChargeCurrent
             val chargeCurrent = if (soc >= 90) {
                 val slope = ((maxChargeCurrent - (maxChargeCurrent * 0.3)) / (100 - 90)) * -1
                 (90 - soc) * slope + maxChargeCurrent
