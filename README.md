@@ -6,7 +6,7 @@ via MQTT. It depends on the [dbus-mqtt-services](https://github.com/sebdehne/dbu
 driver to be installed on the Victron side, which transforms the MQTT messages to a service
 on the dbus.
 
-<img src="docs/overview.png" width="200">
+<img src="docs/overview.png">
 
 This tool is meant to run on a linux device (separate from the Victron cerbo gx) with enough 
 USB ports to support one USB/UART connection per BMS. Personally, I am using a Raspberry PI. 
