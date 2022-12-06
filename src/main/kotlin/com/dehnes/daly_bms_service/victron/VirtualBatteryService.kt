@@ -187,7 +187,8 @@ class VirtualBatteryService(
 
                 DbusData("/Alarms/Alarm", bmsOfflineAlarm.toString(), integer),
                 DbusData("/Alarms/InternalFailure", bmsOfflineAlarm.toString(), integer),
-            )
+            ),
+            knownBmsData.values.toList()
         )
 
         victronMqttClient.send(topic, toBeSendt)
@@ -317,6 +318,7 @@ data class DbusService(
     val serviceType: String,
     val serviceInstance: Int,
     val dbus_data: List<DbusData>,
+    val bmsData: List<BmsData>,
 )
 
 data class DbusData(
