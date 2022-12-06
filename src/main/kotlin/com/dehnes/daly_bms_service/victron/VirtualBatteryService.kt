@@ -71,8 +71,8 @@ class VirtualBatteryService(
 
         val minBatteryVoltage = onlineBmses.minOf { it.minCellVoltage } * persistenceService.numberOfCells()
 
-        val capacityRemainig = onlineBmses.map { it.remainingCapacity }.sum()
-        val installedCapacity = onlineBmses.map { it.bmsId.capacity }.sum()
+        val capacityRemainig = onlineBmses.sumOf { it.remainingCapacity }.round2d()
+        val installedCapacity = onlineBmses.sumOf { it.bmsId.capacity }
         val soc = onlineBmses.map { it.soc }.average().round2d()
         val voltage = onlineBmses.map { it.voltage }.average().round2d()
         val current = onlineBmses.sumOf { it.current }.round2d()
@@ -93,7 +93,7 @@ class VirtualBatteryService(
             0,
             listOf(
                 DbusData("/Mgmt/ProcessName", "Daly Bms Bridge"),
-                DbusData("/Mgmt/ProcessVersion", "1.0"),
+                DbusData("/Mgmt/ProcessVersion", "1.1"),
                 DbusData("/Mgmt/Connection", "Serial Uart Daly"),
 
                 DbusData("/ProductId", "0", integer),
@@ -144,7 +144,7 @@ class VirtualBatteryService(
 
                 DbusData("/Capacity", capacityRemainig.toString(), float),
                 DbusData("/InstalledCapacity", installedCapacity.toString(), integer),
-                DbusData("/ConsumedAmphours", (installedCapacity - capacityRemainig).toString(), float),
+                DbusData("/ConsumedAmphours", (installedCapacity - capacityRemainig).round2d().toString(), float),
 
                 DbusData("/Soc", soc.toString(), float),
                 DbusData("/Dc/0/Voltage", voltage.toString(), float),
