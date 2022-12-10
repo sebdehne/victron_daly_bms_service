@@ -87,6 +87,10 @@ class VirtualBatteryService(
 
         val controlParams: ControlParams = calculateControllParameters(onlineBmses)
 
+        val cellImbalanseAlarm = if (soc < 90) {
+            if (cellDelta > 0.1) 2 else 0
+        } else 0
+
         val toBeSendt = DbusService(
             "daly_bms_battery_1",
             "battery",
@@ -179,7 +183,7 @@ class VirtualBatteryService(
                 DbusData("/Alarms/LowSoc", (if (soc < 10) 2 else 0).toString(), integer),
                 DbusData("/Alarms/HighChargeCurrent", "", none),
                 DbusData("/Alarms/HighDischargeCurrent", "", none),
-                DbusData("/Alarms/CellImbalance", (if (cellDelta > 0.1) 2 else 0).toString(), integer),
+                DbusData("/Alarms/CellImbalance", cellImbalanseAlarm.toString(), integer),
                 DbusData("/Alarms/HighChargeTemperature", (if (maxTemperature > 40) 2 else 0).toString(), integer),
                 DbusData("/Alarms/LowChargeTemperature", (if (minTemperature < 10) 2 else 0).toString(), integer),
                 DbusData("/Alarms/HighTemperature", (if (maxTemperature > 40) 2 else 0).toString(), integer),
@@ -206,11 +210,12 @@ class VirtualBatteryService(
         val maxChargeTemp = persistenceService["daly_bms.maxChargeTemp", "45"]!!.toInt()
         val minChargeTemp = persistenceService["daly_bms.minChargeTemp", "5"]!!.toInt()
         val maxCellVoltage = persistenceService["daly_bms.maxCellVoltage", "3.45"]!!.toDouble()
+        val maxCellVoltageCutOff = persistenceService["daly_bms.maxCellVoltageCutOff", "3.55"]!!.toDouble()
 
         val bmsesAllowingCharging = onlineBmses.filter { bms ->
             val tempOK = bms.maxTemp in (minChargeTemp..maxChargeTemp)
             val chargingOK = bms.mosfetCharging
-            val cellVoltageOK = bms.maxCellVoltage <= maxCellVoltage
+            val cellVoltageOK = bms.maxCellVoltage <= maxCellVoltageCutOff
 
             if (tempOK && chargingOK && cellVoltageOK) {
                 true
@@ -231,16 +236,26 @@ class VirtualBatteryService(
         } else {
             val soc = onlineBmses.map { it.soc }.average()
 
-            // SoC above 90%: decrease the current linear down to 30% of maxChargeCurrent
-            val chargeCurrent = if (soc >= 90) {
-                val slope = ((maxChargeCurrent - (maxChargeCurrent * 0.3)) / (100 - 90)) * -1
-                (90 - soc) * slope + maxChargeCurrent
+            // SoC above 90%: decrease the current linear down to 10% of maxChargeCurrent
+            val chargeCurrent = if (soc >= 90.0) {
+                val slope = ((maxChargeCurrent - (maxChargeCurrent * 0.1)) / (100 - 90)) * -1
+                (soc - 90.0) * slope + maxChargeCurrent
             } else {
                 maxChargeCurrent
             }
 
+            // max charge voltage
+            val maxChargeVoltage: Double
+            if (onlineBmses.flatMap { it.cellVoltages }.any { it >= maxCellVoltage }) {
+                maxChargeVoltage = onlineBmses.map { it.cellVoltages.sum() }.max() + 0.5
+                logger.info { "maxChargeVoltage=$maxChargeVoltage due to high cell voltages" }
+            } else {
+                maxChargeVoltage = (maxCellVoltage * numberOfCells)
+                logger.info { "maxChargeVoltage=$maxChargeVoltage" }
+            }
+
             ChargeParams(
-                maxChargeVoltage = (maxCellVoltage * numberOfCells),
+                maxChargeVoltage = maxChargeVoltage,
                 maxChargeCurrent = chargeCurrent,
                 allowToCharge = true,
                 0
