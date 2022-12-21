@@ -71,6 +71,7 @@ class BmsService(
 
         // 3 - query all data
         val collectedData = runInParallel(
+            false,
             executorService,
             connected.toList(),
         ) { (device, connection) ->

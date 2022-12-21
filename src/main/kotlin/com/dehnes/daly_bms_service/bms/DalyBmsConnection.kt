@@ -24,7 +24,7 @@ class BmsConnection(
     val batterId = bmsId.bmsId
 
     init {
-        read(rxBuf.size, Duration.ofSeconds(2))
+        read(rxBuf.size, Duration.ofSeconds(1))
         logger.info { "$batterId - Connected to $serialPortFile" }
     }
 
@@ -36,17 +36,20 @@ class BmsConnection(
     }
 
     private fun readDataInternal(): BmsData {
-        val cellVoltages = exec(DalyBmsCommand.CELL_VOLTAGES, responseFrames = 11).let { frames ->
+        val cellVoltages = exec(DalyBmsCommand.CELL_VOLTAGES, true).let { frames ->
             val result = mutableListOf<Double>()
 
-            frames.forEachIndexed { index, f ->
-                val frameNumber = f.data[0].toUnsignedInt()
-                check(frameNumber == index + 1) { "Frame number does not match" }
-                repeat(3) { i ->
-                    if (result.size >= numberOfCells) return@forEachIndexed
-                    result.add(readInt16Bits(f.data, 1 + i + i).toDouble() / 1000)
+            frames
+                .distinctBy { it.data[0].toUnsignedInt() }
+                .sortedBy { it.data[0].toUnsignedInt() }
+                .forEachIndexed { index, f ->
+                    val frameNumber = f.data[0].toUnsignedInt()
+                    check(frameNumber == index + 1) { "Frame number does not match" }
+                    repeat(3) { i ->
+                        if (result.size >= numberOfCells) return@forEachIndexed
+                        result.add(readInt16Bits(f.data, 1 + i + i).toDouble() / 1000)
+                    }
                 }
-            }
 
             check(result.size == numberOfCells)
             result
@@ -65,40 +68,105 @@ class BmsConnection(
         )
     }
 
-    private fun exec(cmd: DalyBmsCommand, responseFrames: Int = 1): List<ResponseFrame> {
-        repeat(3) { retry ->
+    private fun exec(cmd: DalyBmsCommand, isMultiResponse: Boolean = false): List<ResponseFrame> {
+        repeat(10) { retry ->
             val toSerialBytes = cmd.toSerialBytes()
             outputStream.write(toSerialBytes)
             outputStream.flush()
             logger.debug { "$batterId - Sent retry=$retry cmd=$cmd toSerialBytes=${toSerialBytes.toList()}" }
-            val result = readFrames(responseFrames)
-            if (result != null) return result
+
+            val responseFrames = readFramesV2(isMultiResponse)
+            if (responseFrames.isNotEmpty()) {
+                val good = responseFrames.filter { it.isChecksumValid }
+                if (isMultiResponse && good.size > 5) return good
+                else if (!isMultiResponse && good.size == 1) return good
+            }
         }
 
         error("Could not read response(s) for cmd=$cmd")
     }
 
-    private fun read(readBytes: Int, timeout: Duration): ByteArray {
-        logger.debug { "$batterId - Trying to readBytes=$readBytes during timeout=${timeout.toSeconds()} seconds" }
+    private fun readFramesV2(isMultiResponse: Boolean): List<ResponseFrame> {
+        return if (!isMultiResponse) {
+            listOfNotNull(readFrame())
+        } else {
+            val data = read(rxBuf.size, Duration.ofSeconds(1))
+
+            val results = mutableListOf<ResponseFrame>()
+            var pos = 0
+            while (pos + 13 <= data.size) {
+
+                // search for start pattern
+                if (data[pos] != 0xa5.toByte()) {
+                    pos++
+                    continue
+                }
+                if (data[pos + 1] != 1.toByte()) {
+                    pos++
+                    continue
+                }
+                if (data[pos + 2] != DalyBmsCommand.CELL_VOLTAGES.cmd.toByte()) {
+                    pos++
+                    continue
+                }
+                if (data[pos + 3] != 8.toByte()) {
+                    pos++
+                    continue
+                }
+
+                val rawData = ByteArray(13) { 0 }
+                System.arraycopy(rxBuf, pos, rawData, 0, rawData.size)
+                var checksum: Byte = 0
+                (0..11).forEach {
+                    checksum = (checksum + rawData[it]).toByte()
+                }
+                results.add(
+                    ResponseFrame(
+                        rawData[0].toUnsignedInt(),
+                        rawData[1].toUnsignedInt(),
+                        rawData[2].toUnsignedInt(),
+                        rawData[3].toUnsignedInt(),
+                        ByteArray(8).apply {
+                            System.arraycopy(rawData, 4, this, 0, 8)
+                        },
+                        (checksum == rawData[12]).apply {
+                            if (!this) {
+                                logger.debug { "$batterId - Checksum failure. checksum=$checksum rawData=${rawData.toList()}" }
+                            }
+                        },
+                        rawData
+                    ).apply {
+                        logger.debug { "$batterId - readFramesV2 pos=$pos frame=$this" }
+                    }
+                )
+
+                pos += 13
+            }
+
+
+            results
+        }
+    }
+
+    private fun read(target: Int, timeout: Duration): ByteArray {
+        logger.debug { "$batterId - Trying to readBytes=$target during timeout=${timeout.toSeconds()} seconds" }
         val deadline = System.currentTimeMillis() + timeout.toMillis()
         var read = 0
-        while (true) {
-            if (read >= readBytes || System.currentTimeMillis() > deadline) {
-                break
-            }
+        while (read < target && System.currentTimeMillis() <= deadline) {
             if (inputStream.available() < 1) {
                 Thread.sleep(100)
                 continue
             }
-            val r = inputStream.read(rxBuf, read, readBytes - read)
+            val r = inputStream.read(rxBuf, read, target - read)
             if (r < 0) {
+                logger.warn { "$batterId - EOF detected" }
                 Thread.sleep(100)
                 continue
             }
             read += r
         }
 
-        check(read <= readBytes) { "Read too much" }
+        check(read <= target) { "Read too much" }
 
         val array = ByteArray(read) { 0 }
         System.arraycopy(rxBuf, 0, array, 0, read)
@@ -107,7 +175,7 @@ class BmsConnection(
     }
 
     private fun readFrame(): ResponseFrame? {
-        val rawData = read(13, Duration.ofSeconds(1))
+        val rawData = read(13, Duration.ofMillis(500))
         if (rawData.isEmpty()) return null // timeout
         if (rawData.size != 13) {
             logger.error { "$batterId - Did not read 13 bytes rawData=${rawData.toList()}" }
@@ -129,23 +197,11 @@ class BmsConnection(
             },
             (checksum == rawData[12]).apply {
                 if (!this) {
-                    logger.error { "$batterId - Checksum failure. checksum=$checksum rawData=${rawData.toList()}" }
+                    logger.debug { "$batterId - Checksum failure. checksum=$checksum rawData=${rawData.toList()}" }
                 }
             },
             rawData
         )
-    }
-
-    private fun readFrames(framesToRead: Int): List<ResponseFrame>? {
-        val result = mutableListOf<ResponseFrame>()
-        repeat(framesToRead) {
-            val f = readFrame() ?: return@repeat
-            if (!f.isChecksumValid) {
-                return@repeat
-            }
-            result.add(f)
-        }
-        return if (result.isEmpty()) null else result
     }
 
     fun close() {
@@ -173,6 +229,7 @@ data class ResponseFrame(
 // See https://diysolarforum.com/resources/daly-smart-bms-manual-and-documentation.48/
 // TODO figure out how to set SoC (it is possible via PC software)
 enum class DalyBmsCommand(val cmd: Int) {
+    UNKNOWN_0(0x21),
     VOUT_IOUT_SOC(0x90),
     MIN_MAX_CELL_VOLTAGE(0x91),
     MIN_MAX_TEMPERATURE(0x92),
@@ -182,6 +239,8 @@ enum class DalyBmsCommand(val cmd: Int) {
     CELL_TEMPERATURE(0x96),
     CELL_BALANCE_STATE(0x97),
     FAILURE_CODES(0x98),
+    UNKNOWN_1(0x99),
+    UNKNOWN_2(0xd8),
     DISCHRG_FET(0xd9),
     CHRG_FET(0xda),
     BMS_RESET(0x00);
@@ -192,7 +251,7 @@ enum class DalyBmsCommand(val cmd: Int) {
 
         val buf = ByteArray(13) { 0 }
         buf[0] = 0xa5.toByte() // Start byte
-        buf[1] = 0x80.toByte() // Host address
+        buf[1] = 0x40.toByte() // Host address
         buf[2] = cmd.toByte()
         buf[3] = 0x08 // Length
 

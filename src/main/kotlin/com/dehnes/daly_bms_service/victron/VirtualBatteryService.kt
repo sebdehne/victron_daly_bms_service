@@ -53,20 +53,18 @@ class VirtualBatteryService(
     }
 
     private fun republishTotal() {
-        if (knownBmsData.isEmpty()) {
+        val bmsOfflineAfterSeconds = persistenceService["daly_bms.bmsOfflineAfterSeconds", "60"]!!.toLong()
+        val now = Instant.now()
+        val (onlineBmses, offlineBmses) = knownBmsData.values.partition {
+            it.timestamp.isAfter(now.minusSeconds(bmsOfflineAfterSeconds))
+        }
+
+        if (onlineBmses.isEmpty()) {
             logger.info { "Cannot send data to Victron - no BMS-data found" }
             return
         }
 
         val numberOfCells = persistenceService.numberOfCells()
-
-        val bmsOfflineAfterSeconds = persistenceService["daly_bms.bmsOfflineAfterSeconds", "60"]!!.toLong()
-        val now = Instant.now()
-
-        val (onlineBmses, offlineBmses) = knownBmsData.values.partition {
-            it.timestamp.isAfter(now.minusSeconds(bmsOfflineAfterSeconds))
-        }
-
         val bmsOfflineAlarm = if (offlineBmses.isNotEmpty()) 2 else 0
 
         val minBatteryVoltage = onlineBmses.minOf { it.minCellVoltage } * persistenceService.numberOfCells()
@@ -77,8 +75,8 @@ class VirtualBatteryService(
         val voltage = onlineBmses.map { it.voltage }.average().round2d()
         val current = onlineBmses.sumOf { it.current }.round2d()
         val power = (voltage * current).round2d()
-        val maxTemperature = onlineBmses.map { it.maxTemp }.max()
-        val minTemperature = onlineBmses.map { it.minTemp }.min()
+        val maxTemperature = onlineBmses.maxOf { it.maxTemp }
+        val minTemperature = onlineBmses.maxOf { it.minTemp }
         val maxCellVoltage = onlineBmses.maxBy { it.maxCellVoltage }
         val minCellVoltage = onlineBmses.minBy { it.minCellVoltage }
         val chargeCycles = onlineBmses.maxBy { it.cycles }.cycles

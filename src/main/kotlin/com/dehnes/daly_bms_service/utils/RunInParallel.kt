@@ -5,6 +5,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 
 fun <Input, Output> runInParallel(
+    runInLocalThread: Boolean = false,
     executorService: ExecutorService,
     items: Collection<Input>,
     mapper: (item: Input) -> Output?
@@ -14,7 +15,7 @@ fun <Input, Output> runInParallel(
     val errors = mutableListOf<Throwable>()
     val c = CountDownLatch(items.size)
     items.forEach { item ->
-        executorService.submit {
+        val task = {
             try {
                 val r = mapper(item)
                 if (r != null) {
@@ -29,6 +30,12 @@ fun <Input, Output> runInParallel(
                     errors.add(e)
                 }
             }
+        }
+
+        if (runInLocalThread) {
+            task()
+        } else {
+            executorService.submit(task)
         }
     }
 
