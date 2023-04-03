@@ -81,6 +81,7 @@ class VirtualBatteryService(
         val capacityRemainig = onlineBmses.sumOf { it.remainingCapacity }.round2d()
         val installedCapacity = onlineBmses.sumOf { it.bmsId.capacity }
         val soc = onlineBmses.map { it.soc }.average().round2d()
+        val estimatedSoC = onlineBmses.map { it.avgEstimatedSoc }.average().round2d()
         val voltage = onlineBmses.map { it.voltage }.average().round2d()
         val current = onlineBmses.sumOf { it.current }.round2d()
         val power = (voltage * current).round2d()
@@ -160,6 +161,7 @@ class VirtualBatteryService(
                 DbusData("/ConsumedAmphours", (installedCapacity - capacityRemainig).round2d().toString(), float),
 
                 DbusData("/Soc", soc.toString(), float),
+                DbusData("/SocEstimated", estimatedSoC.toString(), float),
                 DbusData("/Dc/0/Voltage", voltage.toString(), float),
                 DbusData("/Dc/0/Current", current.toString(), float),
                 DbusData("/Dc/0/Power", power.toString(), float),

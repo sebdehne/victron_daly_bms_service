@@ -126,6 +126,7 @@ data class BmsData(
     val voltage: Double,
     val current: Double,
     val soc: Double,
+    val avgEstimatedSoc: Double,
 
     val maxCellVoltage: Double,
     val maxCellNumber: Int,
@@ -150,5 +151,6 @@ data class BmsData(
     val cycles: Int,
 
     val cellVoltages: List<Double>,
+    val socEstimates: List<Double>,
     val errors: List<String>,
 )

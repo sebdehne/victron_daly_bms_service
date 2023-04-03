@@ -305,12 +305,14 @@ fun parseData(
     cellVoltages: List<Double>,
     failureCodes: ResponseFrame,
 ): BmsData {
+    val current = (readInt16Bits(voutIoutSoc.data, 4).toDouble() - 30000) / 10
     return BmsData(
         bmsId = usbId,
         timestamp = Instant.now(),
         voltage = readInt16Bits(voutIoutSoc.data, 0).toDouble() / 10,
-        current = (readInt16Bits(voutIoutSoc.data, 4).toDouble() - 30000) / 10,
+        current = current,
         soc = readInt16Bits(voutIoutSoc.data, 6).toDouble() / 10,
+        avgEstimatedSoc = cellVoltages.map { SoCEstimator.estimate(it, current < 0) }.average(),
         maxCellVoltage = (readInt16Bits(minMaxCell.data, 0).toDouble()) / 1000,
         maxCellNumber = minMaxCell.data[2].toInt(),
         minCellVoltage = (readInt16Bits(minMaxCell.data, 3).toDouble()) / 1000,
@@ -336,6 +338,7 @@ fun parseData(
         loadStatus = statusInfo.data[3].toInt() == 1,
         cycles = readInt16Bits(statusInfo.data, 5),
         cellVoltages = cellVoltages,
+        socEstimates = cellVoltages.map { SoCEstimator.estimate(it, current < 0) },
         errors = errorsCodes.mapNotNull { (bitPos, errorStr) ->
             val (byteN, bitN) = bitPos
             val b = failureCodes.data[byteN].toUnsignedInt()
