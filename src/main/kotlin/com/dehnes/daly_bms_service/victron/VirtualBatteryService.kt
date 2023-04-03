@@ -28,6 +28,15 @@ class VirtualBatteryService(
 
     init {
         bmsService.listeners["VirtualBatteryService"] = this::onBmsData
+
+        val myListener = object : VictronMqttClientListener {
+            override fun writeSoc(bmsId: String, soc: Int) {
+                check(bmsService.writeSoc(bmsId, soc)) {
+                    "Could not write SoC"
+                }
+            }
+        }
+        victronMqttClient.listeners["VirtualBatteryService"] = myListener
     }
 
     private val lock = ReentrantLock()

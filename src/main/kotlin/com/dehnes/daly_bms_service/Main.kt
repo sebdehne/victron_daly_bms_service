@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import java.time.ZoneId
 import java.util.concurrent.Executors
 
 fun objectMapper() = jacksonObjectMapper()
@@ -28,7 +29,7 @@ fun main(vararg args: String) {
         persistenceService,
     ).apply { this.start() }
 
-    val victronMqttClient = VictronMqttClient(persistenceService, objectMapper)
+    val victronMqttClient = VictronMqttClient(persistenceService, objectMapper, executorService)
     victronMqttClient.reconnect()
     val virtualBatteryService = VirtualBatteryService(victronMqttClient, persistenceService, bmsService)
 
@@ -37,3 +38,6 @@ fun main(vararg args: String) {
     }
 
 }
+
+
+val zoneId = ZoneId.of("Europe/Oslo")

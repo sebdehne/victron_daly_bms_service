@@ -3,6 +3,7 @@ package com.dehnes.daly_bms_service.bms
 import com.dehnes.daly_bms_service.utils.readInt16Bits
 import com.dehnes.daly_bms_service.utils.readInt32Bits
 import com.dehnes.daly_bms_service.utils.toUnsignedInt
+import com.dehnes.daly_bms_service.zoneId
 import mu.KLogger
 import mu.KotlinLogging
 import java.io.File
@@ -33,6 +34,16 @@ class BmsConnection(
     } catch (e: Exception) {
         logger.error(e) { "$batterId - Could not read from $bmsId" }
         null
+    }
+
+    fun writeSoc(soc: Int): Boolean {
+        val responses = exec(
+            DalyBmsCommand.WRITE_SOC,
+            isMultiResponse = false,
+            value = soc
+        )
+        logger.info { "Wrote SOC $responses" }
+        return responses.isNotEmpty()
     }
 
     private fun readDataInternal(): BmsData {
@@ -68,9 +79,9 @@ class BmsConnection(
         )
     }
 
-    private fun exec(cmd: DalyBmsCommand, isMultiResponse: Boolean = false): List<ResponseFrame> {
+    private fun exec(cmd: DalyBmsCommand, isMultiResponse: Boolean = false, value: Any? = null): List<ResponseFrame> {
         repeat(10) { retry ->
-            val toSerialBytes = cmd.toSerialBytes()
+            val toSerialBytes = cmd.toSerialBytes(value)
             outputStream.write(toSerialBytes)
             outputStream.flush()
             logger.debug { "$batterId - Sent retry=$retry cmd=$cmd toSerialBytes=${toSerialBytes.toList()}" }
@@ -229,7 +240,6 @@ data class ResponseFrame(
 // See https://diysolarforum.com/resources/daly-smart-bms-manual-and-documentation.48/
 // TODO figure out how to set SoC (it is possible via PC software)
 enum class DalyBmsCommand(val cmd: Int) {
-    UNKNOWN_0(0x21),
     VOUT_IOUT_SOC(0x90),
     MIN_MAX_CELL_VOLTAGE(0x91),
     MIN_MAX_TEMPERATURE(0x92),
@@ -243,9 +253,11 @@ enum class DalyBmsCommand(val cmd: Int) {
     UNKNOWN_2(0xd8),
     DISCHRG_FET(0xd9),
     CHRG_FET(0xda),
-    BMS_RESET(0x00);
+    BMS_RESET(0x00),
+    WRITE_SOC(0x21),
+    ;
 
-    fun toSerialBytes(): ByteArray {
+    fun toSerialBytes(value: Any?): ByteArray {
 
         var checksum: Byte = 0
 
@@ -254,6 +266,23 @@ enum class DalyBmsCommand(val cmd: Int) {
         buf[1] = 0x40.toByte() // Host address
         buf[2] = cmd.toByte()
         buf[3] = 0x08 // Length
+
+        if (this == WRITE_SOC) {
+            val soc = value as Int
+            check(soc in 0..100) {
+                "Invalid soc $soc"
+            }
+            val soc10 = soc * 10
+            val dateTime = Instant.now().atZone(zoneId)
+            buf[4] = dateTime.year.mod(100).toByte() // year
+            buf[5] = dateTime.monthValue.toByte()
+            buf[6] = dateTime.dayOfMonth.toByte()
+            buf[7] = dateTime.hour.toByte()
+            buf[8] = dateTime.minute.toByte()
+            buf[9] = dateTime.second.toByte()
+            buf[10] = soc10.shr(8).toByte()
+            buf[11] = soc10.toByte()
+        }
 
         (0..11).forEach {
             checksum = (checksum + buf[it]).toByte()

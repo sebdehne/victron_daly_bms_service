@@ -101,6 +101,16 @@ class BmsService(
         return true
     }
 
+    fun writeSoc(bmsId: String, soc: Int): Boolean {
+        var result = false
+        asLocked {
+            connected.toList().filter { it.first.bmsId == bmsId }.forEach { conn ->
+                result = conn.second.writeSoc(soc)
+            }
+        }
+        return result
+    }
+
 }
 
 data class BmsId(
