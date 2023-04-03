@@ -85,9 +85,11 @@ class VirtualBatteryService(
 
         val controlParams: ControlParams = calculateControllParameters(onlineBmses)
 
-        val cellImbalanseAlarm = if (soc < 90) {
-            if (cellDelta > 0.1) 2 else 0
-        } else 0
+        val cellImbalanseAlarm = if (90 > soc && soc > 30) {
+            if (cellDelta > 0.2) 2 else 0
+        } else {
+            if (cellDelta > 0.4) 2 else 0
+        }
 
         val toBeSendt = DbusService(
             "daly_bms_battery_1",
@@ -264,7 +266,7 @@ class VirtualBatteryService(
 
     private fun calculateDischargeParams(onlineBmses: List<BmsData>): DischargeParams {
         val maxDischargeCurrent = persistenceService["daly_bms.maxDischargeCurrent", "380"]!!.toDouble()
-        val minCellVoltage = persistenceService["daly_bms.minCellVoltage", "3.00"]!!.toDouble()
+        val minCellVoltage = persistenceService["daly_bms.minCellVoltage", "2.70"]!!.toDouble()
         val minDischargeTemp = persistenceService["daly_bms.minDischargeTemp", "-10"]!!.toInt()
         val maxDischargeTemp = persistenceService["daly_bms.maxDischargeTemp", "45"]!!.toInt()
         val minDischargeSoC = persistenceService["daly_bms.minDischargeSoC", "10"]!!.toInt()
