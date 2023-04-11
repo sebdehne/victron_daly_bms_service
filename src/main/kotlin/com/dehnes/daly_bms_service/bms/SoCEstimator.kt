@@ -34,7 +34,7 @@ object SoCEstimator {
                 cellVoltage in left.voltage..right.voltage
             } ?: run {
             // outside of range
-            return if (cellVoltage <= finalTable.first().voltage) 0.0 else if (cellVoltage >= finalTable.last().voltage) 0.0 else {
+            return if (cellVoltage <= finalTable.first().voltage) 0.0 else if (cellVoltage >= finalTable.last().voltage) 100.0 else {
                 error("")
             }
         }
