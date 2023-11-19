@@ -20,7 +20,7 @@ import java.util.concurrent.locks.ReentrantLock
 class VirtualBatteryService(
     private val victronMqttClient: VictronMqttClient,
     private val persistenceService: PersistenceService,
-    bmsService: BmsService,
+    private val bmsService: BmsService,
 ) {
 
     private val logger = KotlinLogging.logger { }
@@ -99,6 +99,13 @@ class VirtualBatteryService(
             if (cellDelta > 0.2) 2 else 0
         } else {
             if (cellDelta > 0.4) 2 else 0
+        }
+
+        onlineBmses.forEach { bms ->
+            if (bms.soc < 100 && bms.maxCellVoltage >= 3.44) {
+                logger.info { "Writing 100% SoC to $bms.bmsId because maxCellVoltage=${bms.maxCellVoltage}" }
+                bmsService.writeSoc(bms.bmsId.bmsId, 100)
+            }
         }
 
         val toBeSendt = DbusService(
