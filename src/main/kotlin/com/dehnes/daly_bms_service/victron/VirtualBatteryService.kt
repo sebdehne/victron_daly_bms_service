@@ -267,7 +267,8 @@ class VirtualBatteryService(
     }
 
     private fun calculateDischargeParams(onlineBmses: List<BmsData>): DischargeParams {
-        val maxDischargeCurrent = persistenceService["daly_bms.maxDischargeCurrent", "380"]!!.toDouble()
+        val numberOfCells = persistenceService.numberOfCells()
+        val maxDischargeCurrentConfig = persistenceService["daly_bms.maxDischargeCurrent", "380"]!!.toDouble()
         val minCellVoltage = persistenceService["daly_bms.minCellVoltage", "2.70"]!!.toDouble()
         val minDischargeTemp = persistenceService["daly_bms.minDischargeTemp", "-10"]!!.toInt()
         val maxDischargeTemp = persistenceService["daly_bms.maxDischargeTemp", "45"]!!.toInt()
@@ -296,11 +297,25 @@ class VirtualBatteryService(
         }
         val nrOfModulesBlockingDischarge = onlineBmses.size - bmsesAllowingDischarging.size
 
-        // TODO limit powerdraw if SoC/voltage is low
-        // 51.2 = 20%
-        // 48.0 = 10%
-        // 40.0 =  0%
 
+        val lowestCellVoltage = onlineBmses.minBy { it.minCellVoltage }.minCellVoltage
+
+        val throttleStart = 3.2 // 51,2
+        val throttleEnd = 3.0 // 48
+
+        val maxDischargeCurrent = when {
+            lowestCellVoltage < throttleEnd -> 0.toDouble()
+            lowestCellVoltage > throttleStart -> maxDischargeCurrentConfig
+            else -> {
+                val throttleCurrent = 100 // we throttle from 100A -> 0A
+                val voltageRange = throttleStart - throttleEnd
+                val voltage = lowestCellVoltage - throttleEnd
+                val percent = voltage / voltageRange
+                throttleCurrent * percent
+            }
+        }
+
+        logger.info { "DVCC DCL - lowestCellVoltage=$lowestCellVoltage maxDischargeCurrent=$maxDischargeCurrent" }
 
         return if (nrOfModulesBlockingDischarge > 0) {
             DischargeParams(
