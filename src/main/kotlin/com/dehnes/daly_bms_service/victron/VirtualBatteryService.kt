@@ -220,8 +220,12 @@ class VirtualBatteryService(
         val maxChargeCurrent = persistenceService["daly_bms.maxChargeCurrent", "210"]!!.toDouble()
         val maxChargeTemp = persistenceService["daly_bms.maxChargeTemp", "45"]!!.toInt()
         val minChargeTemp = persistenceService["daly_bms.minChargeTemp", "5"]!!.toInt()
-        val maxCellVoltage = persistenceService["daly_bms.maxCellVoltage", "3.45"]!!.toDouble()
+        val maxCellVoltageCharge = persistenceService["daly_bms.maxCellVoltageCharge", "3.4"]!!.toDouble()
         val maxCellVoltageCutOff = persistenceService["daly_bms.maxCellVoltageCutOff", "3.55"]!!.toDouble()
+
+        // the charge voltage at Victron must be somewhat higher due to voltage drop
+        // but as the battery reaches higher voltage, the current drops and thus also the voltage drop
+        val maxCellChargeVoltage = persistenceService["daly_bms.maxCellChargeVoltage", "3.55"]!!.toDouble()
 
         val bmsesAllowingCharging = onlineBmses.filter { bms ->
             val tempOK = bms.maxTemp in (minChargeTemp..maxChargeTemp)
@@ -239,35 +243,15 @@ class VirtualBatteryService(
 
         return if (nrOfModulesBlockingCharge > 0) {
             ChargeParams(
-                maxChargeVoltage = (maxCellVoltage * numberOfCells),
+                maxChargeVoltage = (maxCellVoltageCharge * numberOfCells),
                 maxChargeCurrent = 0.0,
                 allowToCharge = false,
                 nrOfModulesBlockingCharge
             )
         } else {
-            val soc = onlineBmses.map { it.soc }.average()
-
-            // SoC above 90%: decrease the current linear down to 10% of maxChargeCurrent
-            val chargeCurrent = if (soc >= 90.0) {
-                val slope = ((maxChargeCurrent - (maxChargeCurrent * 0.1)) / (100 - 90)) * -1
-                (soc - 90.0) * slope + maxChargeCurrent
-            } else {
-                maxChargeCurrent
-            }
-
-            // max charge voltage
-            val maxChargeVoltage: Double
-            if (onlineBmses.flatMap { it.cellVoltages }.any { it >= maxCellVoltage }) {
-                maxChargeVoltage = onlineBmses.map { it.cellVoltages.sum() }.max() + 0.5
-                logger.info { "maxChargeVoltage=$maxChargeVoltage due to high cell voltages" }
-            } else {
-                maxChargeVoltage = (maxCellVoltage * numberOfCells)
-                logger.info { "maxChargeVoltage=$maxChargeVoltage" }
-            }
-
             ChargeParams(
-                maxChargeVoltage = maxChargeVoltage,
-                maxChargeCurrent = chargeCurrent,
+                maxChargeVoltage = (maxCellVoltageCharge * numberOfCells),
+                maxChargeCurrent = maxChargeCurrent,
                 allowToCharge = true,
                 0
             )
@@ -304,6 +288,12 @@ class VirtualBatteryService(
             }
         }
         val nrOfModulesBlockingDischarge = onlineBmses.size - bmsesAllowingDischarging.size
+
+        // TODO limit powerdraw if SoC/voltage is low
+        // 51.2 = 20%
+        // 48.0 = 10%
+        // 40.0 =  0%
+
 
         return if (nrOfModulesBlockingDischarge > 0) {
             DischargeParams(
