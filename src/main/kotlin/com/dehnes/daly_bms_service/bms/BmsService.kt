@@ -61,8 +61,7 @@ class BmsService(
         val toBeConnected = targetDevices.filterNot { it in connected }
         toBeConnected.forEach { d ->
             try {
-                val serialFile =
-                    SerialPortFinder.findSerialPortFor(d.usbId) ?: error("Could not lookup serial file for $d")
+                val serialFile = SerialPortFinder.findSerialPort(d.usbId)
                 connected[d] = BmsConnection(serialFile, d, persistenceService.numberOfCells())
             } catch (e: Exception) {
                 logger.error(e) { "Could not connect to $d" }

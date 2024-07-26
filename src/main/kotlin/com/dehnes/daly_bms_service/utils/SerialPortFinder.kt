@@ -1,56 +1,25 @@
 package com.dehnes.daly_bms_service.utils
 
-import mu.KotlinLogging
 import java.io.File
-import java.util.concurrent.TimeUnit
+import java.nio.file.Files
+import kotlin.io.path.name
 
 object SerialPortFinder {
 
-    private val logger = KotlinLogging.logger { }
+    private val searchPath = "/dev/serial/by-path"
 
-    /*
-     * Input: usb-device-id like "1a86:7523"
-     * Output: path to seral port device, if found
-     */
-    fun findSerialPortFor(usbDeviceId: String): String? {
-
-        // see
-        // $ udevadm info /dev/ttyUSB0
-        //
-        // and
-        // ID_PATH=platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1:1.0
-
-        val connectedSerialPorts = "ls -1 /sys/bus/usb-serial/devices".runCommand() ?: return null
-        val device = connectedSerialPorts.firstOrNull { device ->
-            val deviceData = "udevadm info /dev/$device".runCommand() ?: return@firstOrNull false
-            deviceData.any { it.contains(usbDeviceId) }
+    fun findSerialPort(usbDeviceName: String): String {
+        val files = File(searchPath).listFiles().map { it.name }
+        val candidate = files.filter { it.contains(usbDeviceName) }
+        if (candidate.size != 1) {
+            error("Did not find single file with name $usbDeviceName in $searchPath - found: $files")
         }
 
-        return device?.let {
-            val devFile = "/dev/$it"
-            check("stty -F $devFile 9600 raw".runCommand() != null)
-            devFile
-        }
-    }
+        val targetFile = candidate.single()
+        val file = File(searchPath, targetFile)
+        val deviceFile = Files.readSymbolicLink(file.toPath())
 
-    private fun String.runCommand(workingDir: String = ".") = try {
-        val parts = this.split("\\s".toRegex())
-        val proc = ProcessBuilder(*parts.toTypedArray())
-            .directory(File(workingDir))
-            .redirectOutput(ProcessBuilder.Redirect.PIPE)
-            .redirectError(ProcessBuilder.Redirect.PIPE)
-            .start()
-
-        proc.waitFor(60, TimeUnit.MINUTES)
-        if (proc.exitValue() > 0) {
-            logger.error { "exec=$this resulted in output=" + proc.errorStream.bufferedReader().readText() }
-            null
-        } else {
-            proc.inputStream.bufferedReader().readLines()
-        }
-    } catch (e: Exception) {
-        logger.error(e) { "" }
-        null
+        return "/dev/${deviceFile.name}"
     }
 
 }
