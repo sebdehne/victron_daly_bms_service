@@ -1,10 +1,8 @@
 package com.dehnes.daly_bms_service.bms
 
-import com.dehnes.daly_bms_service.utils.AbstractProcess
-import com.dehnes.daly_bms_service.utils.PersistenceService
-import com.dehnes.daly_bms_service.utils.SerialPortFinder
-import com.dehnes.daly_bms_service.utils.runInParallel
+import com.dehnes.daly_bms_service.utils.*
 import mu.KotlinLogging
+import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
@@ -62,6 +60,20 @@ class BmsService(
         toBeConnected.forEach { d ->
             try {
                 val serialFile = SerialPortFinder.findSerialPort(d.usbId)
+
+                // set baud
+                CmdExecutor.runToString(
+                    listOf(
+                        "stty",
+                        "-F",
+                        serialFile,
+                        "9600",
+                        "raw",
+                        "-echo"
+                    ),
+                    Duration.ofSeconds(20)
+                )
+
                 connected[d] = BmsConnection(serialFile, d, persistenceService.numberOfCells())
             } catch (e: Exception) {
                 logger.error(e) { "Could not connect to $d" }
